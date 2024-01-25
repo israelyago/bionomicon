@@ -4,6 +4,7 @@ import pathlib
 from typing import List
 
 import h5py
+
 from data import BiologicalData
 
 logger = logging.getLogger("crawler.data_saver")
@@ -23,8 +24,6 @@ class DataSaver:
             with file_path.open("w") as file:
                 file.write(content)
 
-        logger.info(f"Saved {len(data_to_save)} sequences")
-
     def save_to_csv_file(self, biological_data: List[BiologicalData], file_name: str):
         file_path = pathlib.Path.joinpath(self._output_folder, file_name)
         with file_path.open("a") as csv_file:
@@ -34,8 +33,6 @@ class DataSaver:
                 seq = bio_data.get_sequence()
                 is_enzyme = int(bio_data.is_enzyme())
                 stream.writerow((seq, is_enzyme))
-
-        logger.info(f"Data written to '{file_path}'.")
 
     def save_to_hdf5_file(
         self, biological_data: List[BiologicalData], file_name: str, driver="core"
