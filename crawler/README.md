@@ -1,12 +1,16 @@
 # Development
-To run locally:
+Setup conda env:
 ```sh
-python -m venv
-source venv/bin/activate
-pip install -r requirements.txt
+conda env create -f conda_environment.yml
+conda activate bionomicon-crawler
+```
+
+To save dependencies:
+```sh
+conda env export | grep -v "^prefix: " > conda_environment.yml
 ```
 
 ## VSCODE
-It is a good idea to setup vscode to use the virtual env:
+It is a good idea to setup vscode to use the conda env:
 - Python: Select interpreter
-- Provide the path to the virtual env, (e.g. ./venv/bin/python) (Beaware of the current root of vscode)
+Selecting the appropriate conda env
