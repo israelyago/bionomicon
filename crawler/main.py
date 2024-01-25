@@ -2,7 +2,7 @@ import pathlib
 import sys
 
 import arguments
-import downloader
+import extractor
 import logs
 import save_data
 
@@ -21,11 +21,8 @@ sys.excepthook = handle_exception
 
 args = arguments.get_args()
 
-BATCH_SIZE = args.batch_size
+INPUT_FILE = args.input
 OUTPUT_FOLDER = pathlib.Path(args.output)
-
-if not args.release:
-    BATCH_SIZE = 5
 
 if OUTPUT_FOLDER.exists() and not OUTPUT_FOLDER.is_dir():
     logger.error(f"The output data path ({OUTPUT_FOLDER}) is not a folder.")
@@ -33,31 +30,14 @@ if OUTPUT_FOLDER.exists() and not OUTPUT_FOLDER.is_dir():
 
 pathlib.Path.mkdir(OUTPUT_FOLDER, exist_ok=True)
 
+logger.info(f"Input file set to '{INPUT_FILE}'.")
 logger.info(f"Output folder set to '{OUTPUT_FOLDER}'.")
-logger.info(f"Download batch set to {BATCH_SIZE}.")
 
-uniprot_downloader = downloader.UniProtDownloader(
-    batch_size=BATCH_SIZE, download_type="enzyme"
-)
-
+data_extractor = extractor.DataExtractor(data_path=INPUT_FILE)
 saver = save_data.DataSaver(OUTPUT_FOLDER)
-save_cursor_every_x_batches = 10
-current_batch = 1
-while True:
-    data_to_save = uniprot_downloader.get_next_batch()
-    if data_to_save is None:
-        break
 
-    # saver.save_in_indiviual_files(data_to_save)
-    saver.save_to_csv_file(data_to_save, "sequences.csv")
-    # saver.save_to_hdf5_file(data_to_save, "sequences.hdf5")
+data_to_save = data_extractor.get_data()
 
-    # if current_batch % save_cursor_every_x_batches == 0:
-    cursor = uniprot_downloader.get_cursor_in_memory()
-    uniprot_downloader.update_cursor_in_file(cursor)
-    logger.info(f"Updated cursor in file to {cursor}")
+saver.save_to_csv_file(data_to_save, "sequences.csv")
 
-    current_batch += 1
-
-
-logger.info("All data were collected")
+logger.info("All data were extracted")
