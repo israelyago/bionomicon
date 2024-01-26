@@ -38,6 +38,8 @@ saver = save_data.DataSaver(OUTPUT_FOLDER)
 
 data_to_save = data_extractor.get_data()
 
+logger.info(f"Data extracted, total: {len(data_to_save)}")
+
 saver.save_to_csv_file(data_to_save, "sequences.csv")
 
-logger.info("All data were extracted")
+logger.info("Data saved")
