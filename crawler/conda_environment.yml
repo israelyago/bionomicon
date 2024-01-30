@@ -56,6 +56,3 @@ dependencies:
   - wheel=0.41.2=py311h06a4308_0
   - xz=5.4.5=h5eee18b_0
   - zlib=1.2.13=hd590300_5
-  - pip:
-      - bigxml==1.0.0
-      - defusedxml==0.7.1

@@ -1,6 +1,7 @@
 import csv
 import logging
 import pathlib
+from datetime import datetime
 from typing import List
 
 import h5py
@@ -11,8 +12,22 @@ logger = logging.getLogger("crawler.data_saver")
 
 
 class DataSaver:
-    def __init__(self, output_folder: pathlib.Path) -> None:
+    def __init__(self, output_folder: pathlib.Path, driver="core") -> None:
         self._output_folder = output_folder
+
+        file_path = pathlib.Path.joinpath(self._output_folder, "sequences.hdf5")
+
+        logger.info(f"Opening HDF5 file. May take some time...")
+        start_time = datetime.now()
+        if driver == "core":
+            self._hdf5_file = h5py.File(
+                file_path, "a", driver=driver, backing_store=True
+            )
+        else:
+            self._hdf5_file = h5py.File(file_path, "a", driver="sec2")
+        end_time = datetime.now() - start_time
+
+        logger.info(f"It took {end_time} to open the file hdf5")
 
     def save_in_indiviual_files(self, data_to_save: List[BiologicalData]):
         for to_save in data_to_save:
@@ -42,19 +57,17 @@ class DataSaver:
 
         off_set = len(sequences_list)
 
-        file_path = pathlib.Path.joinpath(self._output_folder, file_name)
-        with h5py.File(file_path, "a", driver=driver, backing_store=True) as hd5f_file:
-            group = hd5f_file.require_group("default")
-            h5py_string_type = h5py.string_dtype(encoding="utf-8")
-            sequences_dataset = group.require_dataset(
-                "sequences", shape=(0,), maxshape=(None,), dtype=h5py_string_type
-            )
-            is_enzyme_dataset = group.require_dataset(
-                "is_enzyme", shape=(0,), maxshape=(None,), dtype=bool
-            )
+        group = self._hdf5_file.require_group("default")
+        h5py_string_type = h5py.string_dtype(encoding="utf-8")
+        sequences_dataset = group.require_dataset(
+            "sequences", shape=(0,), maxshape=(None,), dtype=h5py_string_type
+        )
+        is_enzyme_dataset = group.require_dataset(
+            "is_enzyme", shape=(0,), maxshape=(None,), dtype=bool
+        )
 
-            sequences_dataset.resize(sequences_dataset.shape[0] + off_set, axis=0)
-            sequences_dataset[-off_set:] = sequences_list
+        sequences_dataset.resize(sequences_dataset.shape[0] + off_set, axis=0)
+        sequences_dataset[-off_set:] = sequences_list
 
-            is_enzyme_dataset.resize(is_enzyme_dataset.shape[0] + off_set, axis=0)
-            is_enzyme_dataset[-off_set:] = is_enzyme_list
+        is_enzyme_dataset.resize(is_enzyme_dataset.shape[0] + off_set, axis=0)
+        is_enzyme_dataset[-off_set:] = is_enzyme_list
