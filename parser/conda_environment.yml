@@ -1,4 +1,4 @@
-name: bionomicon-crawler
+name: bionomicon-parser
 channels:
   - conda-forge
   - defaults

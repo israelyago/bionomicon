@@ -2,7 +2,7 @@
 Setup conda env:
 ```sh
 conda env create -f conda_environment.yml
-conda activate bionomicon-crawler
+conda activate bionomicon-parser
 ```
 
 To save dependencies:
