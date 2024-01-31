@@ -24,26 +24,26 @@ sys.excepthook = handle_exception
 args = arguments.get_args()
 
 INPUT_FILE = args.input
-OUTPUT_FOLDER = pathlib.Path(args.output)
+OUT_FILE_PATH = pathlib.Path(args.out)
 BATCH_SIZE = 10000
 HDF5_DRIVER = "core"
 if args.release:
     BATCH_SIZE = 100000
     HDF5_DRIVER = "sec2"
 
-if OUTPUT_FOLDER.exists() and not OUTPUT_FOLDER.is_dir():
-    logger.error(f"The output data path ({OUTPUT_FOLDER}) is not a folder.")
-    sys.exit("Fatal error. Provided output folder is a file, should be a dir.")
+if OUT_FILE_PATH.exists() and not OUT_FILE_PATH.is_file():
+    logger.error(f"The output file path ({OUT_FILE_PATH}) is not a file")
+    sys.exit("Fatal error. Provided output file path is not a file")
 
-pathlib.Path.mkdir(OUTPUT_FOLDER, exist_ok=True)
+pathlib.Path.mkdir(OUT_FILE_PATH.parent, exist_ok=True)
 
 logger.info(f"Input file set to {INPUT_FILE}")
-logger.info(f"Output folder set to {OUTPUT_FOLDER}")
+logger.info(f"Output file to {OUT_FILE_PATH}")
 logger.info(f"Batch size set to {BATCH_SIZE}")
 logger.info(f"Driver for HDF5: {HDF5_DRIVER}")
 
 data_extractor = extractor.DataExtractor(data_path=INPUT_FILE)
-saver = save_data.DataSaver(OUTPUT_FOLDER, driver=HDF5_DRIVER)
+saver = save_data.DataSaver(OUT_FILE_PATH, driver=HDF5_DRIVER)
 
 data_buffer = []
 total_data_processed = 0
@@ -53,12 +53,12 @@ for biological_data in data_extractor.next():
     data_buffer.append(biological_data)
 
     if len(data_buffer) >= BATCH_SIZE:
-        saver.save_to_hdf5_file(data_buffer, "sequences.hdf5")
+        saver.save_to_hdf5_file(data_buffer)
         total_data_processed += len(data_buffer)
         data_buffer.clear()
 
 if len(data_buffer) > 0:
-    saver.save_to_hdf5_file(data_buffer, "sequences.hdf5")
+    saver.save_to_hdf5_file(data_buffer)
     total_data_processed += len(data_buffer)
     data_buffer.clear()
 

@@ -9,7 +9,7 @@ import colorlog
 from pythonjsonlogger import jsonlogger
 
 MAX_LOG_FILE_SIZE = 100 * 1024**2  # 100 MiB
-MAIN_LOG_FILE_NAME = "crawler"
+MAIN_LOG_FILE_NAME = "parser"
 
 
 def _get_stdout_handler() -> colorlog.StreamHandler:
@@ -41,7 +41,7 @@ def _get_file_handler(logs_path: pathlib.Path) -> RotatingFileHandler:
     return file_handler
 
 
-logger = logging.getLogger("crawler")
+logger = logging.getLogger("parser")
 
 args = arguments.get_args()
 logger.setLevel(logging.INFO)
