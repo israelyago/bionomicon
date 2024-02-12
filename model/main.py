@@ -38,9 +38,7 @@ OUTPUT_FOLER.mkdir(exist_ok=True)
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 logger.info(f"Using {device} device for torch")
 logger.info(f"Seed used: {args.seed}")

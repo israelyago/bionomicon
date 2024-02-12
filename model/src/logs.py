@@ -7,7 +7,7 @@ from logging.handlers import RotatingFileHandler
 import colorlog
 from pythonjsonlogger import jsonlogger
 
-import src.arguments
+import arguments
 
 MAX_LOG_FILE_SIZE = 100 * 1024**2  # 100 MiB
 MAIN_LOG_FILE_NAME = "model"
@@ -44,7 +44,7 @@ def _get_file_handler(logs_path: pathlib.Path) -> RotatingFileHandler:
 
 logger = logging.getLogger("model")
 
-args = src.arguments.get_args()
+args = arguments.get_args()
 logger.setLevel(logging.INFO)
 
 if not args.release:
