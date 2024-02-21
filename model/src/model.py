@@ -29,6 +29,8 @@ class TransformerModel(nn.Module):
         self.embedding = nn.Embedding(ntoken, d_model)
         self.d_model = d_model
         self.linear = nn.Linear(d_model, ntoken)
+        self.classifier_head = nn.Linear(ntoken, 2)
+        self.softmax = nn.Softmax(dim=-1)
 
         self.init_weights()
 
@@ -37,6 +39,9 @@ class TransformerModel(nn.Module):
         self.embedding.weight.data.uniform_(-initrange, initrange)
         self.linear.bias.data.zero_()
         self.linear.weight.data.uniform_(-initrange, initrange)
+
+        self.classifier_head.bias.data.zero_()
+        self.classifier_head.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, src: Tensor, src_mask: Tensor = None) -> Tensor:
         """
@@ -58,6 +63,9 @@ class TransformerModel(nn.Module):
             )
         output = self.transformer_encoder(src, src_mask)
         output = self.linear(output)
+        output = self.classifier_head(output)
+        output = output.mean(dim=1)
+        output = self.softmax(output)
         return output
 
 

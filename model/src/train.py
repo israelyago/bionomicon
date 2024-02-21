@@ -3,14 +3,14 @@ import math
 import os
 import time
 
-import torch
-from torch import Tensor, nn
-from torch.utils.data import DataLoader, dataset
-from torchtext.vocab import Vocab
-
 import arguments
 import h5dataset
 import logs
+import torch
+from torch import Tensor, nn
+from torch.utils.data import DataLoader, dataset, random_split
+from torchtext.vocab import Vocab
+
 from model import TransformerModel
 
 logger = logs.get_logger("train")
@@ -82,7 +82,7 @@ model = TransformerModel(ntokens, emsize, nhead, d_hid, nlayers, dropout).to(dev
 
 criterion = nn.CrossEntropyLoss()
 lr = 5.0  # learning rate
-optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
 best_val_loss = float("inf")
@@ -99,45 +99,65 @@ def data_process(raw_text_iter: dataset.IterableDataset) -> Tensor:
     return torch.cat(tuple(filter(lambda t: t.numel() > 0, data)))
 
 
+# def evaluate(model: nn.Module, eval_data: Tensor) -> float:
+#     model.eval()  # turn on evaluation mode
+#     total_loss = 0.0
+#     print("Evaluation size: ", eval_data.size(0))
+#     with torch.no_grad():
+#         for i in range(0, eval_data.size(0) - 1, 32):
+#             for batch in train_data:
+#                 data = batch[0]
+#                 targets = batch[1].long()
+#                 seq_len = data.size(0)
+#                 output = model(data)
+#                 total_loss += seq_len * criterion(output, targets).item()
+#     return total_loss / (len(eval_data) - 1)
+
+
 model.train()
 
-classifier_head = nn.Linear(22, 2)
 total_loss = 0.0
 log_interval = 200
 start_time = time.time()
 
 num_batches = math.ceil(len(train_data) / batch_size)
-epoch = 1
+
 current_iter = 1
 logger.info("Starting training")
-for batch in train_data:
-    sequences = batch[0]
-    truth_y = batch[1].long()
-    tokens = torch.stack([get_tokens(seq) for seq in sequences])
-    result = model(tokens)
-    result_from_head = classifier_head(result)
-    result_from_head = result_from_head.mean(dim=1)
-    pred_probab = nn.Softmax(dim=-1)(result_from_head)
+for epoch in range(1, epochs + 1):
+    for batch in train_data:
+        sequences = batch[0]
+        truth_y = batch[1].long()
+        tokens = torch.stack([get_tokens(seq) for seq in sequences])
+        pred_probab = model(tokens)
 
-    loss = criterion(pred_probab, truth_y)
+        loss = criterion(pred_probab, truth_y)
 
-    optimizer.zero_grad()
-    loss.backward()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-    optimizer.step()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+        optimizer.step()
+        optimizer.zero_grad()
 
-    total_loss += loss.item()
-    if current_iter % log_interval == 0:
-        lr = scheduler.get_last_lr()[0]
-        ms_per_batch = (time.time() - start_time) * 1000 / log_interval
-        cur_loss = total_loss / log_interval
-        ppl = math.exp(cur_loss)
-        print(
-            f"| epoch {epoch:3d} | {current_iter:5d}/{num_batches:5d} batches | "
-            f"lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | "
-            f"loss {cur_loss:5.2f} | ppl {ppl:8.2f}"
-        )
-        total_loss = 0
-        start_time = time.time()
+        total_loss += loss.item()
+        if current_iter % log_interval == 0:
+            lr = scheduler.get_last_lr()[0]
+            ms_per_batch = (time.time() - start_time) * 1000 / log_interval
+            cur_loss = total_loss / log_interval
+            ppl = math.exp(cur_loss)
+            print(
+                f"| epoch {epoch:3d} | {current_iter:5d}/{num_batches:5d} batches | "
+                f"lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | "
+                f"loss {cur_loss:5.2f} | ppl {ppl:8.2f}"
+            )
+            total_loss = 0
+            start_time = time.time()
 
-    current_iter += 1
+        # if current_iter > 100:
+        #     break
+        current_iter += 1
+
+# test_loss = evaluate(model, train_data)
+# test_ppl = math.exp(test_loss)
+# print("=" * 89)
+# print(f"| End of training | test loss {test_loss:5.2f} | " f"test ppl {test_ppl:8.2f}")
+# print("=" * 89)
