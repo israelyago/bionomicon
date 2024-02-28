@@ -22,7 +22,7 @@ class DataExtractor:
     def next(self) -> BiologicalData | None:
         for nth, row in enumerate(self._csv_reader):
             try:
-                yield BiologicalData(row[0], row[1], bool(row[2]))
+                yield BiologicalData(row[0], row[1], bool(int(row[2])))
             except IndexError as error:
                 logger.error(
                     f"Could not access information from element index {nth}. Element: {row}"
