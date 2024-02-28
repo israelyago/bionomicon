@@ -3,10 +3,9 @@ import sys
 from datetime import datetime
 
 import arguments
+import extractor
 import logs
 import save_data
-
-import extractor
 
 logger = logs.get_logger("main")
 
@@ -49,15 +48,25 @@ data_buffer = []
 total_data_processed = 0
 start_processing_time = datetime.now()
 
+nth_batch = 1
 for biological_data in data_extractor.next():
     data_buffer.append(biological_data)
 
     if len(data_buffer) >= BATCH_SIZE:
+        logger.info(
+            "Saving batch %d, with %d records" % (nth_batch, len(data_buffer)),
+            extra={"batch_nth": nth_batch},
+        )
         saver.save_to_hdf5_file(data_buffer)
         total_data_processed += len(data_buffer)
         data_buffer.clear()
+        nth_batch += 1
 
 if len(data_buffer) > 0:
+    logger.info(
+        "Saving batch %d, with %d records" % (nth_batch, len(data_buffer)),
+        extra={"batch_nth": nth_batch},
+    )
     saver.save_to_hdf5_file(data_buffer)
     total_data_processed += len(data_buffer)
     data_buffer.clear()
