@@ -1,8 +1,11 @@
+import pathlib
 import collections
 import math
 import os
 import time
+from datetime import datetime
 
+import numpy as np
 import arguments
 import h5dataset
 import logs
@@ -11,12 +14,33 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, dataset, random_split
 from torchtext.vocab import Vocab
 
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
+from torch.utils.tensorboard import SummaryWriter
+import sys
+
+from torchsampler import ImbalancedDatasetSampler
+
+import torchmetrics
+
 from model import TransformerModel
 
 logger = logs.get_logger("train")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logger.info(f"Using {device} device for torch")
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        logger.info("Saving last model before shutdown")
+        save_model(model, name_without_extension="last")
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+
+    logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+
+sys.excepthook = handle_exception
 
 args = arguments.get_args()
 train_data = h5dataset.H5Dataset(args.dataset)
@@ -26,15 +50,15 @@ g.manual_seed(42)
 
 batch_size = 32
 
-
-# logger.info("Splitting dataset into train and validation. This may take a while...")
-# train_data, val_dataset = random_split(
-#     dataset=train_data, lengths=[0.7, 0.3], generator=g
-# )
+logger.info("Splitting dataset into train and validation. This may take a while...")
+train_data, val_dataset = random_split(
+    dataset=train_data, lengths=[0.7, 0.3], generator=g
+)
 
 logger.info("Creating a data loader")
-train_data = DataLoader(train_data, batch_size=batch_size, shuffle=False, generator=g)
-# val_dataset = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, generator=g)
+train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True, generator=g)
+
+val_dataset = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, generator=g)
 
 amino_acids = collections.Counter(
     {
@@ -79,9 +103,16 @@ nlayers = 2  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncod
 nhead = 2  # number of heads in ``nn.MultiheadAttention``
 dropout = 0.2  # dropout probability
 model = TransformerModel(ntokens, emsize, nhead, d_hid, nlayers, dropout).to(device)
+model.train()
 
-criterion = nn.CrossEntropyLoss()
-lr = 5.0  # learning rate
+# class_weights = torch.tensor(
+#     [211290413 / 184948058, 211290413 / 26342355], dtype=torch.float32
+# )
+# class_weights = 1.0 / (class_weights + 0.1)  # Apply smoothing
+
+# criterion = nn.CrossEntropyLoss(weight=class_weights)
+criterion = nn.BCEWithLogitsLoss()
+lr = 0.0001  # learning rate
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
@@ -114,44 +145,131 @@ def data_process(raw_text_iter: dataset.IterableDataset) -> Tensor:
 #     return total_loss / (len(eval_data) - 1)
 
 
-model.train()
+def test_model(iter_nth):
+
+    torchmetrics_f1_score = torchmetrics.F1Score(task="multiclass", num_classes=2)
+    # logger.info(f"Testing model (iter: {iter_nth})")
+    with torch.no_grad():
+        counter = 0
+        for sequences, labels in val_dataset:
+            # for sequences, labels in train_data:
+            labels = labels.long()
+            tokens = torch.stack([get_tokens(seq) for seq in sequences])
+            outputs = model(tokens)
+
+            _, predicted = torch.max(outputs, 1)
+
+            values_summed = predicted.sum().item()
+            if values_summed != 0:
+                logger.info(f"Summed predicted values: {values_summed}")
+
+            score = torchmetrics_f1_score(predicted, labels)
+
+            if counter == 100:
+                break
+            counter += 1
+
+    score = torchmetrics_f1_score.compute()
+    # logger.info(f"F1 score from torchmetrics: {score}")
+    tf_writer.add_scalar(f"F1/test/network", score, iter_nth)
+
+
+def save_model(model, name_without_extension=None):
+    dir = pathlib.Path(args.output, experiment_name)
+    dir.mkdir(exist_ok=True)
+
+    if name_without_extension is None:
+        name_without_extension = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    name = f"{name_without_extension}.pth"
+    file = pathlib.Path(dir, name)
+
+    logger.info(
+        f"Saving model as {experiment_name}/{name}",
+        extra={"model_path": file, "model_name": name},
+    )
+    torch.save(model.state_dict(), file)
+
 
 total_loss = 0.0
-log_interval = 200
+log_interval_in_steps = 200
+checkpoint_interval_in_steps = log_interval_in_steps * 10
 start_time = time.time()
 
 num_batches = math.ceil(len(train_data) / batch_size)
 
+experiment_name = f"Adam-{epochs}epoch-{batch_size}batch-{lr}lr"
+tf_writer = SummaryWriter(f"runs/{experiment_name}")
+
+
+def load_model_params():
+    sub_path = pathlib.Path(experiment_name, "last.pth")
+    model_path = pathlib.Path(args.output, sub_path)
+
+    if model_path.exists():
+        logger.info(f"Loading model params from {model_path}")
+        return torch.load(model_path)
+    logger.info(f"No checkpoint found. Starting training from scratch")
+    return None
+
+
+last_model_params = load_model_params()
+if last_model_params:
+    model.load_state_dict(last_model_params)
+
+logger.info(f"Experiment name: {experiment_name}")
+
 current_iter = 1
 logger.info("Starting training")
 for epoch in range(1, epochs + 1):
+    logger.info("Current epoch " + str(epoch))
     for batch in train_data:
         sequences = batch[0]
-        truth_y = batch[1].long()
+        labels = batch[1].long()
+        # sum = labels.sum().item()
+        # if sum is not 32:
+        #     logger.info("Labels sum " + str(sum))
+        # continue
         tokens = torch.stack([get_tokens(seq) for seq in sequences])
-        pred_probab = model(tokens)
+        outputs = model(tokens)
 
-        loss = criterion(pred_probab, truth_y)
+        labels = nn.functional.one_hot(
+            labels, num_classes=2
+        ).float()  # For nn.BCEWithLogitsLoss
 
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-        optimizer.step()
+        loss = criterion(outputs, labels)
+
         optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
         total_loss += loss.item()
-        if current_iter % log_interval == 0:
+
+        average_loss = total_loss / current_iter
+
+        tf_writer.add_scalar("Loss/train/raw", loss, current_iter)
+        tf_writer.add_scalar("Loss/train/average", average_loss, current_iter)
+
+        if current_iter % log_interval_in_steps == 0:
             lr = scheduler.get_last_lr()[0]
-            ms_per_batch = (time.time() - start_time) * 1000 / log_interval
-            cur_loss = total_loss / log_interval
-            ppl = math.exp(cur_loss)
-            print(
+            ms_per_batch = (time.time() - start_time) * 1000 / log_interval_in_steps
+            cur_loss = total_loss / log_interval_in_steps
+            # ppl = np.exp(cur_loss)
+            # logger.info(
+            #     f"| epoch {epoch:3d} | {current_iter:5d}/{num_batches:5d} batches | "
+            #     f"lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | "
+            #     f"loss {cur_loss:5.6f} | ppl {ppl:8.2f}"
+            # )
+            logger.info(
                 f"| epoch {epoch:3d} | {current_iter:5d}/{num_batches:5d} batches | "
                 f"lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | "
-                f"loss {cur_loss:5.2f} | ppl {ppl:8.2f}"
+                f"loss {cur_loss:5.6f}"
             )
             total_loss = 0
+            test_model(current_iter)
             start_time = time.time()
 
+        if current_iter % checkpoint_interval_in_steps == 0:
+            save_model(model=model)
         # if current_iter > 100:
         #     break
         current_iter += 1

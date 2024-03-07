@@ -16,7 +16,7 @@ _parser.add_argument(
     "-o",
     "--output",
     help="Folder to output model to. Creates if needed",
-    default="output",
+    default="models",
     type=pathlib.Path,
 )
 _parser.add_argument(
