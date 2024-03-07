@@ -1,7 +1,10 @@
 # Overview
+
+![Bionomicon logo](logo.png "Bionomicon")
 Our goal is to build a new AI model capable of learning from stablished biological data (Amino acid sequences) which sequences are enzymes and which aren't, i.e. we want a classifier in the format of f(amino_acid_sequence) -> enzyme / non-enzyme.
 
 # Steps
+
 1. Download data from Uniprot (FTP *recommended*) (uniprot_trembl & uniprot_sprot)
 1. Extract data (as of writing, around 1.6TB of uncompressed data)
 1. From the uncompressed data, we need to create an hdf5 file.
