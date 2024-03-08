@@ -1,4 +1,4 @@
-name: bionomicon-parser
+name: bionomicon-csv-to-hdf5
 channels:
   - conda-forge
   - defaults
