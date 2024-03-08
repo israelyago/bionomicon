@@ -18,8 +18,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 from torch.utils.tensorboard import SummaryWriter
 import sys
 
-from torchsampler import ImbalancedDatasetSampler
-
 import torchmetrics
 
 from model import TransformerModel
@@ -43,7 +41,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 sys.excepthook = handle_exception
 
 args = arguments.get_args()
-train_data = h5dataset.H5Dataset(args.dataset)
+train_dataset = h5dataset.H5Dataset(args.dataset)
 
 g = torch.Generator()
 g.manual_seed(42)
@@ -51,14 +49,18 @@ g.manual_seed(42)
 batch_size = 32
 
 logger.info("Splitting dataset into train and validation. This may take a while...")
-train_data, val_dataset = random_split(
-    dataset=train_data, lengths=[0.7, 0.3], generator=g
+train_dataset, validation_dataset, testing_dataset = random_split(
+    dataset=train_dataset, lengths=[0.7, 0.15, 0.15], generator=g
 )
 
 logger.info("Creating a data loader")
-train_data = DataLoader(train_data, batch_size=batch_size, shuffle=True, generator=g)
+train_dataset = DataLoader(
+    train_dataset, batch_size=batch_size, shuffle=True, generator=g
+)
 
-val_dataset = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, generator=g)
+# val_dataset = DataLoader(val_dataset, batch_size=batch_size, shuffle=True, generator=g)
+validation_dataset = DataLoader(validation_dataset, batch_size=16, shuffle=True)
+testing_dataset = DataLoader(testing_dataset, batch_size=32)
 
 amino_acids = collections.Counter(
     {
@@ -97,11 +99,11 @@ def get_tokens(sequence: bytes):
 vocab = Vocab(counter=amino_acids, specials=["<unk>", "<pad>"])
 
 ntokens = len(vocab)  # size of vocabulary
-emsize = 10  # embedding dimension
-d_hid = 10  # dimension of the feedforward network model in ``nn.TransformerEncoder``
-nlayers = 2  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
-nhead = 2  # number of heads in ``nn.MultiheadAttention``
-dropout = 0.2  # dropout probability
+emsize = 10  # 128 for big, 10 for small # embedding dimension
+d_hid = 10  # 512 for big, 10 for small # dimension of the feedforward network model in ``nn.TransformerEncoder``
+nlayers = 2  # 6 for big, 2 for small # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+nhead = 2  # 8 for big, 2 for small # number of heads in ``nn.MultiheadAttention``
+dropout = 0.1  # dropout probability
 model = TransformerModel(ntokens, emsize, nhead, d_hid, nlayers, dropout).to(device)
 model.train()
 
@@ -110,9 +112,11 @@ model.train()
 # )
 # class_weights = 1.0 / (class_weights + 0.1)  # Apply smoothing
 
+class_weights = torch.tensor([1570420 / 816433, 1570420 / 753987], dtype=torch.float)
+class_weights = 1.0 / (class_weights + 0.1)
 # criterion = nn.CrossEntropyLoss(weight=class_weights)
-criterion = nn.BCEWithLogitsLoss()
-lr = 0.0001  # learning rate
+criterion = nn.BCEWithLogitsLoss(weight=class_weights)
+lr = 1e-4  # learning rate
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
@@ -145,33 +149,24 @@ def data_process(raw_text_iter: dataset.IterableDataset) -> Tensor:
 #     return total_loss / (len(eval_data) - 1)
 
 
-def test_model(iter_nth):
+def get_f1_model_score(dataset):
 
     torchmetrics_f1_score = torchmetrics.F1Score(task="multiclass", num_classes=2)
-    # logger.info(f"Testing model (iter: {iter_nth})")
+
     with torch.no_grad():
-        counter = 0
-        for sequences, labels in val_dataset:
-            # for sequences, labels in train_data:
+        start_time = time.time()
+        for sequences, labels in dataset:
             labels = labels.long()
             tokens = torch.stack([get_tokens(seq) for seq in sequences])
             outputs = model(tokens)
 
             _, predicted = torch.max(outputs, 1)
 
-            values_summed = predicted.sum().item()
-            if values_summed != 0:
-                logger.info(f"Summed predicted values: {values_summed}")
-
             score = torchmetrics_f1_score(predicted, labels)
 
-            if counter == 100:
-                break
-            counter += 1
-
-    score = torchmetrics_f1_score.compute()
-    # logger.info(f"F1 score from torchmetrics: {score}")
-    tf_writer.add_scalar(f"F1/test/network", score, iter_nth)
+        end_time = time.time() - start_time
+        logger.debug(f"It took {end_time} to validate model (whole dataset)")
+    return torchmetrics_f1_score.compute()
 
 
 def save_model(model, name_without_extension=None):
@@ -191,13 +186,13 @@ def save_model(model, name_without_extension=None):
 
 
 total_loss = 0.0
-log_interval_in_steps = 200
-checkpoint_interval_in_steps = log_interval_in_steps * 10
+log_interval_in_steps = 2000
+checkpoint_interval_in_steps = log_interval_in_steps * 5
 start_time = time.time()
 
-num_batches = math.ceil(len(train_data) / batch_size)
+num_batches = len(train_dataset)
 
-experiment_name = f"Adam-{epochs}epoch-{batch_size}batch-{lr}lr"
+experiment_name = f"Balanced-tiny-Adam-small-{epochs}epoch-{batch_size}batch-{lr}lr"
 tf_writer = SummaryWriter(f"runs/{experiment_name}")
 
 
@@ -222,13 +217,10 @@ current_iter = 1
 logger.info("Starting training")
 for epoch in range(1, epochs + 1):
     logger.info("Current epoch " + str(epoch))
-    for batch in train_data:
+    for batch_index, batch in enumerate(train_dataset):
         sequences = batch[0]
         labels = batch[1].long()
-        # sum = labels.sum().item()
-        # if sum is not 32:
-        #     logger.info("Labels sum " + str(sum))
-        # continue
+
         tokens = torch.stack([get_tokens(seq) for seq in sequences])
         outputs = model(tokens)
 
@@ -244,28 +236,34 @@ for epoch in range(1, epochs + 1):
 
         total_loss += loss.item()
 
-        average_loss = total_loss / current_iter
+        total_average_loss = total_loss / current_iter
+        average_log_loss = loss.mean().item()
 
         tf_writer.add_scalar("Loss/train/raw", loss, current_iter)
-        tf_writer.add_scalar("Loss/train/average", average_loss, current_iter)
+        tf_writer.add_scalar("Loss/train/log_average", average_log_loss, current_iter)
+        tf_writer.add_scalar(
+            "Loss/train/total_average", total_average_loss, current_iter
+        )
 
         if current_iter % log_interval_in_steps == 0:
-            lr = scheduler.get_last_lr()[0]
+            # lr = scheduler.get_last_lr()[0]
             ms_per_batch = (time.time() - start_time) * 1000 / log_interval_in_steps
-            cur_loss = total_loss / log_interval_in_steps
+            # cur_loss = total_loss / log_interval_in_steps
             # ppl = np.exp(cur_loss)
             # logger.info(
             #     f"| epoch {epoch:3d} | {current_iter:5d}/{num_batches:5d} batches | "
             #     f"lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | "
             #     f"loss {cur_loss:5.6f} | ppl {ppl:8.2f}"
             # )
+            batch_nth = batch_index + 1
             logger.info(
-                f"| epoch {epoch:3d} | {current_iter:5d}/{num_batches:5d} batches | "
+                f"| epoch {epoch:3d} | {batch_nth:5d}/{num_batches:5d} batches | "
                 f"lr {lr:02.2f} | ms/batch {ms_per_batch:5.2f} | "
-                f"loss {cur_loss:5.6f}"
+                f"avg. log loss {average_log_loss:5.6f}"
             )
-            total_loss = 0
-            test_model(current_iter)
+            # total_loss = 0
+            score = get_f1_model_score(validation_dataset)
+            tf_writer.add_scalar(f"F1/validation/network", score, current_iter)
             start_time = time.time()
 
         if current_iter % checkpoint_interval_in_steps == 0:
@@ -274,6 +272,9 @@ for epoch in range(1, epochs + 1):
         #     break
         current_iter += 1
 
+score = get_f1_model_score(testing_dataset)
+logger.info(f"Final model F1 score: {score}")
+save_model(model=model, name_without_extension="last")
 # test_loss = evaluate(model, train_data)
 # test_ppl = math.exp(test_loss)
 # print("=" * 89)
