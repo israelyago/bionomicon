@@ -27,7 +27,14 @@ _parser.add_argument(
     type=pathlib.Path,
 )
 _parser.add_argument(
-    "-s", "--seed", help="Seed for random operations. Default: 42", type=int, default=42
+    "-s",
+    "--seed",
+    help="Seed for random operations. Default: 42. Use 0 for random",
+    type=int,
+    default=42,
+)
+_parser.add_argument(
+    "-b", "--big", help="Use the bigger version of the model", action="store_true"
 )
 _args = _parser.parse_args()
 

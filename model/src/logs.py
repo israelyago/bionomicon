@@ -47,6 +47,7 @@ logger = logging.getLogger("model")
 args = arguments.get_args()
 logger.setLevel(logging.INFO)
 
+
 if not args.release:
     logger.setLevel(logging.DEBUG)
     logger.info(f"Running in DEBUG mode.")
