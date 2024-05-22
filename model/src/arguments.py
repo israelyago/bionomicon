@@ -16,7 +16,7 @@ _parser.add_argument(
     "-o",
     "--output",
     help="Folder to output model to. Creates if needed",
-    default="models",
+    default="checkpoints",
     type=pathlib.Path,
 )
 _parser.add_argument(
