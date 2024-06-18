@@ -3,6 +3,8 @@ import pathlib
 import torch
 import logs
 from datetime import datetime
+import json
+import copy
 
 logger = logs.get_logger("model_saver")
 
@@ -23,3 +25,8 @@ def save_checkpoint(
         extra={"model_path": file, "model_name": name},
     )
     torch.save(checkpoint, file)
+    json_file_path = pathlib.Path(dir, "configuration.json")
+    checkpoint_as_config = copy.deepcopy(checkpoint)
+    checkpoint_as_config["model"].pop("state_dict", None)
+    with open(json_file_path, "w+") as f:
+        json.dump(checkpoint_as_config, f)
