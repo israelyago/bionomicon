@@ -27,6 +27,11 @@ _parser.add_argument(
     type=pathlib.Path,
 )
 _parser.add_argument(
+    "--runs_dir",
+    help="Folder path to save the experiment data",
+    type=pathlib.Path,
+)
+_parser.add_argument(
     "-s",
     "--seed",
     help="Seed for random operations. Default: 42. Use 0 for random",
