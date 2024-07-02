@@ -5,25 +5,17 @@ import arguments
 import h5dataset
 import logs
 import torch
-import uuid
 import pathlib
-
 from itertools import product
 from torch import nn
 from torch.utils.data import DataLoader, random_split
 from model_loader import load_checkpoint
 from model_saver import save_checkpoint
-
-# from dict_hash import sha256
+from dict_hash import sha256
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
 from torch.utils.tensorboard import SummaryWriter
-import ray
-from ray import train, tune
-from ray.tune.schedulers import ASHAScheduler
-
 import torchmetrics
-
 from model import TransformerModel
 
 logger = logs.get_logger("train")
@@ -33,6 +25,8 @@ logger.info(f"Using {device} device for torch")
 
 checkpoint = None
 experiment_name = None
+
+args = arguments.get_args()
 
 
 def handle_exception(exc_type, exc_value, exc_traceback):
@@ -56,11 +50,12 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 sys.excepthook = handle_exception
 
 train_dataset_size, validation_dataset_size, testing_dataset_size = [
-    0.0002,
-    0.001,
-    0.001,
+    0.01,
+    0.01,
+    0.01,
 ]
 ignore_size = 1 - train_dataset_size - validation_dataset_size - testing_dataset_size
+EPOCHS = 3
 
 
 def all_combinations(params):
@@ -156,7 +151,7 @@ def test_bionomicon(model, dataset, config):
 
 def train_bionomicon(config):
 
-    experiment_name = str(uuid.uuid4())
+    experiment_name = config["experiment_name"]
 
     logger.info(f"Experiment name: {experiment_name}")
     my_checkpoint = {
@@ -245,7 +240,6 @@ def train_bionomicon(config):
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
     best_val_loss = float("inf")
-    epochs = 10
 
     log_interval_in_steps = 100
     validation_interval_in_steps = 50000
@@ -284,7 +278,7 @@ def train_bionomicon(config):
         ).to(device)
         training_torchmetrics_f1_score = torchmetrics.F1Score(task="binary").to(device)
 
-        for epoch in range(my_checkpoint["current_epoch"], epochs + 1):
+        for epoch in range(my_checkpoint["current_epoch"], EPOCHS + 1):
             logger.info(f"Current epoch {epoch}")
             for batch_index, (sequences, labels) in enumerate(train_dataset):
                 if skip_nth_iters > 0:
@@ -360,7 +354,8 @@ def train_bionomicon(config):
                     )
                     batch_nth = batch_index + 1
                     logger.info(
-                        f"| epoch {epoch:2d}"
+                        f"| exp. nth {config['experiment_number']}"
+                        f" | epoch {epoch:2d}"
                         f" | {batch_nth:5d}/{num_batches:5d} batches"
                         f" | ms/batch {ms_per_batch:5.2f}"
                         # f" | lr {lr:02.2f}"
@@ -425,8 +420,6 @@ def train_bionomicon(config):
                 my_checkpoint["current_epoch"],
             )
 
-            # BUG: The next line crashes the sytem
-            train.report({"loss_total_average": total_average_loss})
             my_checkpoint["current_epoch"] += 1
     # training_accuracy_score, training_precision_score, training_f1_score, confmat = (
     #     test_bionomicon(model=model, dataset=testing_dataset, config=config)
@@ -450,54 +443,59 @@ def train_bionomicon(config):
     )
 
 
-# possible_combinations = {
-#     "lr": [1e-4, 1e-5],
-#     "batch_size": [32, 64],
-#     "emsize": [32, 128, 512],
-#     "d_hid": [256, 512, 1024],
-#     "nlayers": [8, 10],
-#     "nhead": [8, 16],
-#     "truncate_input": [128, 512],
-# }
-# model_configs = all_combinations(possible_combinations)
-# logger.info(f"Total combinations before filtering: {len(model_configs)}")
-# model_configs = [
-#     # Filter out invalid configurations
-#     config
-#     for config in model_configs
-#     if config["emsize"] % config["nhead"] == 0
-# ]
-# logger.info(f"Total combinations after filtering: {len(model_configs)}")
-
 if __name__ == "__main__":
 
-    args = arguments.get_args()
-    ray.init(local_mode=True)
+    # search_space = {
+    #     "lr": [1e-5, 1e-4],
+    #     "batch_size": [32, 64],
+    #     "emsize": [32, 512],
+    #     "d_hid": [256, 1024],
+    #     "nlayers": [8, 10],
+    #     "nhead": [8, 16],
+    #     "truncate_input": [128, 512],
+    # }
 
     search_space = {
-        "lr": tune.grid_search([1e-5, 1e-4]),
-        "batch_size": tune.grid_search([32, 64]),
-        "emsize": tune.grid_search([32, 128, 512]),
-        "d_hid": tune.grid_search([256, 512, 1024]),
-        "nlayers": tune.grid_search([8, 10]),
-        "nhead": tune.grid_search([8, 16]),
-        "truncate_input": tune.grid_search([128, 512]),
-        "dataset": args.dataset,
-        "seed": args.seed,
-        "output": args.output,
-        "runs_dir": args.runs_dir,
+        "lr": [1e-5],
+        "batch_size": [32],
+        "emsize": [1024, 2048],
+        "d_hid": [1024],
+        "nlayers": [8],
+        "nhead": [4, 8],
+        "truncate_input": [512],
     }
 
-    tuner = tune.Tuner(
-        tune.with_resources(train_bionomicon, resources={"gpu": 0.5}),
-        param_space=search_space,
-        tune_config=tune.TuneConfig(
-            num_samples=1,
-            scheduler=ASHAScheduler(metric="loss_total_average", mode="min"),
-        ),
-    )
-    result_grid = tuner.fit()
+    configs = all_combinations(search_space)
+    configs = [
+        # Filter out invalid configurations
+        config
+        for config in configs
+        if config["emsize"] % config["nhead"] == 0
+    ]
+    external_config = {
+        "dataset": str(args.dataset),
+        "seed": args.seed,
+        "output": str(args.output),
+        "runs_dir": str(args.runs_dir),
+    }
 
-    best_run = result_grid.get_best_result(metric="loss_total_average", mode="min")
-    logger.info("Best result got", extra={"best_run": best_run})
-    logger.info(best_run)
+    for config_index, config in enumerate(configs):
+        # name = sha256(config)
+        name = (
+            f"lr{config['lr']}"
+            f"-batch_size{config['batch_size']}"
+            f"-emsize{config['emsize']}"
+            f"-d_hid{config['d_hid']}"
+            f"-nlayers{config['nlayers']}"
+            f"-nhead{config['nhead']}"
+            f"-truncate_input{config['truncate_input']}"
+        )
+        external_config["experiment_name"] = name
+        external_config["experiment_number"] = config_index + 1
+        config.update(external_config)
+
+    for config in configs:
+        logger.info(
+            f"Running experiment nth: {config['experiment_number']}/{len(configs)}"
+        )
+        train_bionomicon(config=config)
