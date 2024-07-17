@@ -1,0 +1,132 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "[UNK]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "[PAD]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": "[CLS]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 3,
+      "content": "[SEP]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 4,
+      "content": "[MASK]",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": {
+    "type": "Sequence",
+    "normalizers": [
+      {
+        "type": "NFD"
+      },
+      {
+        "type": "Lowercase"
+      },
+      {
+        "type": "StripAccents"
+      }
+    ]
+  },
+  "pre_tokenizer": {
+    "type": "BertPreTokenizer"
+  },
+  "post_processor": null,
+  "decoder": null,
+  "model": {
+    "type": "WordPiece",
+    "unk_token": "[UNK]",
+    "continuing_subword_prefix": "##",
+    "max_input_chars_per_word": 100,
+    "vocab": {
+      "[UNK]": 0,
+      "[PAD]": 1,
+      "[CLS]": 2,
+      "[SEP]": 3,
+      "[MASK]": 4,
+      "a": 5,
+      "b": 6,
+      "c": 7,
+      "d": 8,
+      "e": 9,
+      "f": 10,
+      "g": 11,
+      "h": 12,
+      "i": 13,
+      "k": 14,
+      "l": 15,
+      "m": 16,
+      "n": 17,
+      "p": 18,
+      "q": 19,
+      "r": 20,
+      "s": 21,
+      "t": 22,
+      "u": 23,
+      "v": 24,
+      "w": 25,
+      "x": 26,
+      "y": 27,
+      "z": 28,
+      "##r": 29,
+      "##i": 30,
+      "##l": 31,
+      "##e": 32,
+      "##f": 33,
+      "##n": 34,
+      "##h": 35,
+      "##g": 36,
+      "##v": 37,
+      "##d": 38,
+      "##k": 39,
+      "##a": 40,
+      "##t": 41,
+      "##m": 42,
+      "##s": 43,
+      "##p": 44,
+      "##q": 45,
+      "##y": 46,
+      "##c": 47,
+      "##w": 48,
+      "##x": 49,
+      "##u": 50,
+      "##z": 51,
+      "##b": 52
+    }
+  }
+}
