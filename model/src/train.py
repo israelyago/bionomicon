@@ -50,9 +50,9 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 sys.excepthook = handle_exception
 
 train_dataset_size, validation_dataset_size, testing_dataset_size = [
-    0.01,
-    0.01,
-    0.01,
+    0.25,
+    0.25,
+    0.25,
 ]
 ignore_size = 1 - train_dataset_size - validation_dataset_size - testing_dataset_size
 EPOCHS = 3
@@ -455,15 +455,49 @@ if __name__ == "__main__":
     #     "truncate_input": [128, 512],
     # }
 
+    # a6c04705fbab13c420823e3a8456033e7f6918104d3141c77d4a3049238029e3
     search_space = {
         "lr": [1e-5],
-        "batch_size": [32],
-        "emsize": [1024, 2048],
-        "d_hid": [1024],
+        "batch_size": [64],
+        "emsize": [32],
+        "d_hid": [256],
         "nlayers": [8],
-        "nhead": [4, 8],
-        "truncate_input": [512],
+        "nhead": [8],
+        "truncate_input": [128],
     }
+
+    # b1b2acf6d25a309cabcceefaf9e4c3e42d35ac22c67f7c6452aa8ab423c02122
+    # search_space = {
+    #     "lr": [1e-4],
+    #     "batch_size": [64],
+    #     "emsize": [32],
+    #     "d_hid": [256],
+    #     "nlayers": [8],
+    #     "nhead": [8],
+    #     "truncate_input": [128],
+    # }
+
+    # 092b348059f3f46185fd89fee8ee98d6ae74d1f11020d70dab754db0152ea8ab
+    # search_space = {
+    #     "lr": [1e-4],
+    #     "batch_size": [64],
+    #     "emsize": [32],
+    #     "d_hid": [1024],
+    #     "nlayers": [8],
+    #     "nhead": [16],
+    #     "truncate_input": [128],
+    # }
+
+    # 8d7c18ab6bbbfad80f701d89f75879001eaba0610249529b0d9f837307a8b93f
+    # search_space = {
+    #     "lr": [1e-4],
+    #     "batch_size": [32],
+    #     "emsize": [32],
+    #     "d_hid": [1024],
+    #     "nlayers": [10],
+    #     "nhead": [16],
+    #     "truncate_input": [128],
+    # }
 
     configs = all_combinations(search_space)
     configs = [
@@ -482,7 +516,8 @@ if __name__ == "__main__":
     for config_index, config in enumerate(configs):
         # name = sha256(config)
         name = (
-            f"lr{config['lr']}"
+            f"final"
+            f"-lr{config['lr']}"
             f"-batch_size{config['batch_size']}"
             f"-emsize{config['emsize']}"
             f"-d_hid{config['d_hid']}"
