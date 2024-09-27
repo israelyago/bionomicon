@@ -23,7 +23,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 logger.info(f"Using {device} device for torch")
 
-checkpoint = None
+my_checkpoint = None
 experiment_name = None
 
 args = arguments.get_args()
@@ -36,7 +36,7 @@ def handle_exception(exc_type, exc_value, exc_traceback):
             extra={"experiment_name": experiment_name},
         )
         save_checkpoint(
-            checkpoint=checkpoint,
+            checkpoint=my_checkpoint,
             save_dir=args.output,
             experiment_name=experiment_name,
             name_without_extension="last",
@@ -50,12 +50,12 @@ def handle_exception(exc_type, exc_value, exc_traceback):
 sys.excepthook = handle_exception
 
 train_dataset_size, validation_dataset_size, testing_dataset_size = [
-    0.25,
-    0.25,
-    0.25,
+    0.60,
+    0.10,
+    0.30,
 ]
-ignore_size = 1 - train_dataset_size - validation_dataset_size - testing_dataset_size
-EPOCHS = 3
+# ignore_size = 1 - train_dataset_size - validation_dataset_size - testing_dataset_size
+EPOCHS = 10
 
 
 def all_combinations(params):
@@ -173,13 +173,14 @@ def train_bionomicon(config):
     logger.info("Splitting dataset into train and validation. This may take a while...")
 
     whole_dataset = h5dataset.H5Dataset(config["dataset"])
-    train_dataset, validation_dataset, testing_dataset, _ignore = random_split(
+    # train_dataset, validation_dataset, testing_dataset, _ignore = random_split(
+    train_dataset, validation_dataset, testing_dataset = random_split(
         dataset=whole_dataset,
         lengths=[
             train_dataset_size,
             validation_dataset_size,
             testing_dataset_size,
-            ignore_size,
+            # ignore_size,
         ],
         generator=generator,
     )
@@ -364,31 +365,33 @@ def train_bionomicon(config):
                     )
                     start_time = time.time()
 
-                # if checkpoint["current_iter"] % validation_interval_in_steps == 0:
-                #     start_val_time = time.time()
-                #     (
-                #         training_accuracy_score,
-                #         training_precision_score,
-                #         training_f1_score,
-                #         _confmat,
-                #     ) = test_bionomicon(model=model, dataset=validation_dataset, config=config)
-                #     tf_writer.add_scalar(
-                #         f"Validation/accuracy",
-                #         training_accuracy_score,
-                #         checkpoint["current_iter"],
-                #     )
-                #     tf_writer.add_scalar(
-                #         f"Validation/precision",
-                #         training_precision_score,
-                #         checkpoint["current_iter"],
-                #     )
-                #     tf_writer.add_scalar(
-                #         f"Validation/F1",
-                #         training_f1_score,
-                #         checkpoint["current_iter"],
-                #     )
-                #     delta = time.time() - start_val_time
-                #     start_time += delta
+                if my_checkpoint["current_iter"] % validation_interval_in_steps == 0:
+                    start_val_time = time.time()
+                    (
+                        training_accuracy_score,
+                        training_precision_score,
+                        training_f1_score,
+                        _confmat,
+                    ) = test_bionomicon(
+                        model=model, dataset=validation_dataset, config=config
+                    )
+                    tf_writer.add_scalar(
+                        f"Validation/accuracy",
+                        training_accuracy_score,
+                        my_checkpoint["current_iter"],
+                    )
+                    tf_writer.add_scalar(
+                        f"Validation/precision",
+                        training_precision_score,
+                        my_checkpoint["current_iter"],
+                    )
+                    tf_writer.add_scalar(
+                        f"Validation/F1",
+                        training_f1_score,
+                        my_checkpoint["current_iter"],
+                    )
+                    delta = time.time() - start_val_time
+                    start_time += delta
 
                 if my_checkpoint["current_iter"] % checkpoint_interval_in_steps == 0:
                     my_checkpoint["model"]["state_dict"] = model.state_dict()
@@ -401,24 +404,24 @@ def train_bionomicon(config):
                 my_checkpoint["current_iter"] += 1
                 profiler.step()
 
-            val_accuracy_score, val_precision_score, val_f1_score, confmat = (
-                test_bionomicon(model=model, dataset=validation_dataset, config=config)
-            )
-            tf_writer.add_scalar(
-                f"Validation/accuracy",
-                val_accuracy_score,
-                my_checkpoint["current_epoch"],
-            )
-            tf_writer.add_scalar(
-                f"Validation/precision",
-                val_precision_score,
-                my_checkpoint["current_epoch"],
-            )
-            tf_writer.add_scalar(
-                f"Validation/F1",
-                val_f1_score,
-                my_checkpoint["current_epoch"],
-            )
+            # val_accuracy_score, val_precision_score, val_f1_score, confmat = (
+            #     test_bionomicon(model=model, dataset=validation_dataset, config=config)
+            # )
+            # tf_writer.add_scalar(
+            #     f"Validation/accuracy",
+            #     val_accuracy_score,
+            #     my_checkpoint["current_epoch"],
+            # )
+            # tf_writer.add_scalar(
+            #     f"Validation/precision",
+            #     val_precision_score,
+            #     my_checkpoint["current_epoch"],
+            # )
+            # tf_writer.add_scalar(
+            #     f"Validation/F1",
+            #     val_f1_score,
+            #     my_checkpoint["current_epoch"],
+            # )
 
             my_checkpoint["current_epoch"] += 1
     # training_accuracy_score, training_precision_score, training_f1_score, confmat = (
@@ -456,15 +459,15 @@ if __name__ == "__main__":
     # }
 
     # a6c04705fbab13c420823e3a8456033e7f6918104d3141c77d4a3049238029e3
-    search_space = {
-        "lr": [1e-5],
-        "batch_size": [64],
-        "emsize": [32],
-        "d_hid": [256],
-        "nlayers": [8],
-        "nhead": [8],
-        "truncate_input": [128],
-    }
+    # search_space = {
+    #     "lr": [1e-5],
+    #     "batch_size": [64],
+    #     "emsize": [32],
+    #     "d_hid": [256],
+    #     "nlayers": [8],
+    #     "nhead": [8],
+    #     "truncate_input": [128],
+    # }
 
     # b1b2acf6d25a309cabcceefaf9e4c3e42d35ac22c67f7c6452aa8ab423c02122
     # search_space = {
@@ -478,15 +481,15 @@ if __name__ == "__main__":
     # }
 
     # 092b348059f3f46185fd89fee8ee98d6ae74d1f11020d70dab754db0152ea8ab
-    # search_space = {
-    #     "lr": [1e-4],
-    #     "batch_size": [64],
-    #     "emsize": [32],
-    #     "d_hid": [1024],
-    #     "nlayers": [8],
-    #     "nhead": [16],
-    #     "truncate_input": [128],
-    # }
+    search_space = {
+        "lr": [1e-4],
+        "batch_size": [64],
+        "emsize": [32],
+        "d_hid": [1024],
+        "nlayers": [8],
+        "nhead": [16],
+        "truncate_input": [128],
+    }
 
     # 8d7c18ab6bbbfad80f701d89f75879001eaba0610249529b0d9f837307a8b93f
     # search_space = {
@@ -515,16 +518,17 @@ if __name__ == "__main__":
 
     for config_index, config in enumerate(configs):
         # name = sha256(config)
-        name = (
-            f"final"
-            f"-lr{config['lr']}"
-            f"-batch_size{config['batch_size']}"
-            f"-emsize{config['emsize']}"
-            f"-d_hid{config['d_hid']}"
-            f"-nlayers{config['nlayers']}"
-            f"-nhead{config['nhead']}"
-            f"-truncate_input{config['truncate_input']}"
-        )
+        # name = (
+        #     f"final"
+        #     f"-lr{config['lr']}"
+        #     f"-batch_size{config['batch_size']}"
+        #     f"-emsize{config['emsize']}"
+        #     f"-d_hid{config['d_hid']}"
+        #     f"-nlayers{config['nlayers']}"
+        #     f"-nhead{config['nhead']}"
+        #     f"-truncate_input{config['truncate_input']}"
+        # )
+        name = "champion"
         external_config["experiment_name"] = name
         external_config["experiment_number"] = config_index + 1
         config.update(external_config)
